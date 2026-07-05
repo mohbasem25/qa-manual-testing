@@ -59,8 +59,14 @@ qa-manual-testing/
 │   ├── BUG-004.md   (back-button duplicate order submission — Critical)
 │   ├── BUG-005.md   (CVV field accepts non-numeric paste input — Low)
 │   └── BUG-006.md   (double-submit via "Place Order" click race — High)
-└── 05-traceability/
-    └── Requirements-Traceability-Matrix.md
+├── 05-traceability/
+│   └── Requirements-Traceability-Matrix.md
+└── 06-payment-domain-test-suites/
+    ├── API-Test-Cases.md
+    ├── Database-Test-Cases.md
+    ├── UI-Test-Cases.md
+    ├── Performance-Test-Cases.md
+    └── Security-Test-Cases.md
 ```
 
 ## Why This Project (Skills Demonstrated)
@@ -70,6 +76,18 @@ qa-manual-testing/
 - **Defect reporting quality.** Each bug report separates observed fact (Steps, Expected, Actual) from QA hypothesis (Root Cause / Notes) — a distinction that matters in real triage, where a QA engineer's job is to give developers a fast, credible lead without overclaiming root cause.
 - **Requirements traceability as a coverage argument, not paperwork.** The RTM doesn't just list requirement IDs; it shows *where* defects clustered relative to requirements, tying the traceability exercise back to real findings.
 - **Domain relevance to fintech/payments QA.** The scenario (checkout/payment, multi-currency handling, decline/timeout handling, duplicate-charge prevention) mirrors the risk profile of production payment systems, aligned with the author's ISTQB CTFL / CTAL-TAE / CT-PT / CT-AuT certifications and fintech QA background.
+
+## Extension: Payment-Domain Test Suites (NexaPay)
+
+**[`06-payment-domain-test-suites/`](06-payment-domain-test-suites/)** extends the same ISTQB-technique rigor used in the ShopSphere checkout suite to a second, deliberately different surface: a fictional payment gateway / merchant-acquiring platform, **NexaPay**. Where the ShopSphere artifacts walk end-to-end through the full manual QA lifecycle (plan → design → cases → traceability → bugs) for one flow, this addition demonstrates **cross-discipline test design applied to a single domain** — API, database, UI, performance, and security test cases for the same underlying platform, written the way a QA engineer working across those layers on a payment product actually would:
+
+- **[`API-Test-Cases.md`](06-payment-domain-test-suites/API-Test-Cases.md)** — authorize/capture/void, full and partial refunds, tokenized recurring charges, webhook delivery and retry, merchant onboarding, idempotency-key handling, pagination, and API error handling.
+- **[`Database-Test-Cases.md`](06-payment-domain-test-suites/Database-Test-Cases.md)** — transaction state-machine integrity, referential integrity, double-entry ledger reconciliation, idempotent writes, PCI-style data masking at rest, currency/amount precision, audit trail, and orphaned-record checks.
+- **[`UI-Test-Cases.md`](06-payment-domain-test-suites/UI-Test-Cases.md)** — merchant portal login/2FA, transaction filtering, manual refunds, settlement reports, API key management, multi-currency display, and role-based UI permissions.
+- **[`Performance-Test-Cases.md`](06-payment-domain-test-suites/Performance-Test-Cases.md)** — throughput baselines, soak and spike tests, authorize-endpoint latency SLAs, degraded-processor handling, and concurrent-refund race conditions, framed around representative tooling (k6/JMeter/Gatling) with example SLA targets.
+- **[`Security-Test-Cases.md`](06-payment-domain-test-suites/Security-Test-Cases.md)** — functional security checks (not a penetration test) covering card-data exposure in logs/responses, TLS enforcement, IDOR/authorization, rate limiting, brute-force lockout, token/key expiry, injection/XSS handling, webhook signature verification, and session security, framed against the general, publicly known PCI-DSS and OWASP API Security Top 10 categories.
+
+**NexaPay is an entirely invented platform, created for this portfolio.** It does not represent, and is not modeled on, any real company's product, internal architecture, field names, or proprietary systems — including any current or former employer of the author. It exists solely to demonstrate how the same structured, technique-driven QA approach scales across API, data, UI, performance, and security layers in a payments context.
 
 ## Notes on Realism
 
