@@ -1,8 +1,8 @@
 # Database Test Cases — NexaPay Ledger & Merchant Data Store
 
-**Platform under test:** the data layer behind NexaPay (fictional payment gateway) — a relational ledger holding `merchants`, `orders`, `transactions`, and `refunds` tables, plus a webhook delivery/event log. These test cases focus on data integrity, consistency, and financial correctness rather than UI or API behavior.
+**Platform under test:** the data layer behind NexaPay (fictional payment gateway) — a relational ledger holding `merchants`, `orders`, `transactions`, and `refunds` tables, plus a webhook delivery/event log. It also covers the ledger behind **NexaPay Wallet**, NexaPay's consumer digital-wallet product (wallet balance ledger, P2P transfer atomicity, bill-payment idempotency, transfer limits). These test cases focus on data integrity, consistency, and financial correctness rather than UI or API behavior.
 
-**Total test cases:** 22
+**Total test cases:** 34
 **Columns:** TC ID | Area | Title | Precondition / Setup | Steps / Query Intent | Expected Result | Priority | Type
 
 ## Transaction State Machine Integrity
@@ -74,6 +74,38 @@
 | DB-ORPH-001 | Orphaned records | No refund rows exist without a corresponding transaction | Run after a batch of refund operations, including simulated partial failures. | `SELECT * FROM refunds r LEFT JOIN transactions t ON r.transaction_id = t.id WHERE t.id IS NULL;` | Query returns zero rows. | P1 | Negative |
 | DB-ORPH-002 | Orphaned records | No webhook event log entries reference a non-existent merchant | Webhook events are logged per merchant subscription. | `SELECT * FROM webhook_events w LEFT JOIN merchants m ON w.merchant_id = m.id WHERE m.id IS NULL;` | Query returns zero rows. | P2 | Negative |
 
+## NexaPay Wallet — Balance Ledger Consistency
+
+These test cases extend the ledger-integrity approach above to **NexaPay Wallet**, the consumer digital-wallet product, covering top-up, P2P transfer, and bill-payment activity against the wallet's own ledger tables (`wallet_balances`, `wallet_ledger_entries`).
+
+| TC ID | Area | Title | Precondition / Setup | Steps / Query Intent | Expected Result | Priority | Type |
+|---|---|---|---|---|---|---|---|
+| DB-WBAL-001 | Wallet ledger | Wallet balance ledger reflects the exact top-up amount as a credit entry | A wallet top-up of 20000 minor units has been confirmed successful. | `SELECT * FROM wallet_ledger_entries WHERE reference_id = ? AND entry_type='TOPUP_CREDIT';` | Exactly one credit entry of 20000 exists, referencing the top-up ID; no other wallet ledger rows are affected. | P1 | Positive |
+| DB-WBAL-002 | Wallet ledger | Wallet balance ledger reflects the exact bill-payment amount as a debit entry | A bill payment of 15000 minor units has completed successfully. | `SELECT * FROM wallet_ledger_entries WHERE reference_id = ? AND entry_type='BILL_DEBIT';` | Exactly one debit entry of 15000 exists, referencing the bill payment ID. | P1 | Positive |
+| DB-WBAL-003 | Wallet ledger | Sum of wallet ledger entries reconciles to the displayed wallet balance | Wallet has a mix of top-up, P2P, and bill-payment entries over its history. | `SELECT SUM(credit) - SUM(debit) FROM wallet_ledger_entries WHERE wallet_id = ?;` | Result exactly equals the `wallet_balances.available_balance` value for that wallet; any drift indicates a reconciliation defect. | P1 | Positive |
+
+## NexaPay Wallet — P2P Transfer Atomicity
+
+| TC ID | Area | Title | Precondition / Setup | Steps / Query Intent | Expected Result | Priority | Type |
+|---|---|---|---|---|---|---|---|
+| DB-P2P-001 | Transfer atomicity | P2P transfer debit and credit entries are written atomically | A P2P transfer of 5000 between wallet A and wallet B is submitted. | Query `wallet_ledger_entries` for both wallets immediately after the transfer response, and inspect the transaction/commit boundary in the application logs. | Both the sender debit and recipient credit are committed within a single database transaction; either both rows exist or neither does — no window where only one side is visible. | P1 | Positive |
+| DB-P2P-002 | Transfer atomicity | A failed P2P transfer leaves no partial debit/credit state | The recipient wallet is simulated as unavailable/frozen mid-transfer, forcing a failure after the sender-side debit would otherwise be applied. | Query `wallet_ledger_entries` and `wallet_balances` for both wallets after the failure. | Neither wallet shows a debit or credit for the failed attempt; sender balance is unchanged; the transfer record is marked `FAILED`, not left `IN_PROGRESS`. | P1 | Negative |
+| DB-P2P-003 | Transfer atomicity | Concurrent P2P transfers from the same wallet cannot overdraw the balance | Wallet has a balance of 6000; two concurrent transfer requests of 5000 each are submitted at the same time. | Inspect row-level locking behavior (e.g., `SELECT ... FOR UPDATE` on `wallet_balances`) and the final ledger state. | Exactly one transfer succeeds; the second is rejected with `INSUFFICIENT_BALANCE`; the wallet balance never goes negative. | P1 | Boundary |
+
+## NexaPay Wallet — Bill Payment Idempotency
+
+| TC ID | Area | Title | Precondition / Setup | Steps / Query Intent | Expected Result | Priority | Type |
+|---|---|---|---|---|---|---|---|
+| DB-BILL-001 | Idempotency | Retried bill-payment webhook does not create a duplicate debit | A biller-confirmation webhook for a bill payment is processed, then redelivered with the same `event_id`. | Query `processed_events` and `wallet_ledger_entries` after both deliveries. | `processed_events` records the `event_id` once; only one debit entry exists for the bill payment; the second delivery is a no-op. | P1 | Idempotency |
+| DB-BILL-002 | Idempotency | Bill payment provider transaction reference is unique per payment | Two distinct bill payments are submitted, each expected to receive its own provider reference. | `SELECT provider_reference, COUNT(*) FROM bill_payments GROUP BY provider_reference HAVING COUNT(*) > 1;` | Query returns zero rows; a unique constraint on `provider_reference` prevents accidental duplicate recording of the same underlying payment. | P2 | Positive |
+
+## NexaPay Wallet — Transfer Limit Enforcement
+
+| TC ID | Area | Title | Precondition / Setup | Steps / Query Intent | Expected Result | Priority | Type |
+|---|---|---|---|---|---|---|---|
+| DB-LIM-001 | Limit enforcement | Daily transfer limit is enforced via an aggregate query at the data layer, not app logic alone | Wallet has transferred 9000 today against a configured daily limit of 10000. | Run the daily-aggregate check the application relies on: `SELECT SUM(amount) FROM wallet_transfers WHERE sender_wallet_id = ? AND created_at::date = CURRENT_DATE;` before authorizing a new transfer. | Aggregate correctly reflects 9000; a new transfer of 2000 is blocked before any ledger write occurs, confirming the limit check reads committed data, not a stale in-memory counter. | P2 | Positive |
+| DB-LIM-002 | Limit enforcement | Per-transaction transfer limit constraint rejects an oversized single transfer at insert time | A single transfer of 15000 is attempted against a per-transaction limit of 10000. | Attempt the insert/stored-procedure call that backs `POST /v1/wallet/transfers`. | Insert is rejected by a check constraint or application-level guard before any ledger rows are written; no orphaned `IN_PROGRESS` transfer row remains. | P2 | Boundary |
+
 ## Notes
 
-Table and column names above (`transactions`, `ledger_entries`, `idempotency_keys`, etc.) are illustrative and generic to relational payment-ledger design; they are not drawn from any specific real vendor's schema.
+Table and column names above (`transactions`, `ledger_entries`, `idempotency_keys`, `wallet_ledger_entries`, `wallet_balances`, `wallet_transfers`, `bill_payments`, etc.) are illustrative and generic to relational payment-ledger design; they are not drawn from any specific real vendor's schema.

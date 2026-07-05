@@ -1,8 +1,8 @@
 # API Test Cases — NexaPay Payment Gateway
 
-**Platform under test:** NexaPay — a fictional merchant-acquiring / payment gateway platform (invented for this portfolio) that merchants integrate with to accept card and digital-wallet payments, including tokenized recurring charges, refunds, and settlement reporting. NexaPay is not a real product and does not represent any employer's actual system.
+**Platform under test:** NexaPay — a fictional merchant-acquiring / payment gateway platform (invented for this portfolio) that merchants integrate with to accept card and digital-wallet payments, including tokenized recurring charges, refunds, and settlement reporting. It also covers **NexaPay Wallet**, NexaPay's consumer digital-wallet product — wallet top-up, P2P transfer, and bill payment. NexaPay is not a real product and does not represent any employer's actual system.
 
-**Total test cases:** 28
+**Total test cases:** 44
 **Columns:** TC ID | Endpoint / Method | Title | Preconditions | Request Data (brief) | Expected Result | Priority | Type
 
 ## Authorization & Capture
@@ -77,6 +77,35 @@
 | API-ERR-003 | POST /v1/payments | Unsupported currency code is rejected | Valid API key and payload otherwise complete. | currency="XXX" (not a supported ISO 4217 code) | 422 Unprocessable Entity; error code `UNSUPPORTED_CURRENCY`; lists supported currencies or a documentation link. | P2 | Negative |
 | API-ERR-004 | POST /v1/merchants | API key with insufficient scope is rejected | API key only has `payments:read` scope, not `merchants:write`. | Attempt to create a merchant with a payments-scoped key | 403 Forbidden; error code `INSUFFICIENT_SCOPE`; required scope is named in the error to aid integration debugging. | P2 | Security-lite |
 
+## NexaPay Wallet — Top-Up
+
+NexaPay also operates **NexaPay Wallet**, a consumer digital wallet product (separate from the merchant-acquiring flows above) that lets end users hold a balance, fund it from a linked bank card or bank transfer, send peer-to-peer (P2P) transfers, and pay third-party billers.
+
+| TC ID | Endpoint / Method | Title | Preconditions | Request Data (brief) | Expected Result | Priority | Type |
+|---|---|---|---|---|---|---|---|
+| API-WALLET-001 | POST /v1/wallet/topups | Initiate a wallet top-up from a linked bank card | Consumer has an active NexaPay Wallet and a linked, verified bank card. | source=card, card_token=tok_wallet_1, amount=20000, currency=AED | 201 Created; response includes `topup_id` and `status=PENDING` (or `SUCCESS` for synchronous card funding); wallet balance is not credited until the funding source confirms success. | P1 | Positive |
+| API-WALLET-002 | POST /v1/wallet/topups | Wallet top-up via bank transfer settles asynchronously | Consumer has generated a unique bank-transfer reference for funding. | source=bank_transfer, reference=NXP-TU-88213, amount=50000 | 201 Created with `status=PENDING`; wallet balance is credited only after the matching bank-transfer webhook confirms receipt; wallet balance is unchanged until then. | P2 | Positive |
+| API-WALLET-003 | POST /v1/wallet/topups | Wallet top-up fails gracefully when the linked card is declined | Linked card is a sandbox decline-trigger card. | source=card, card_token=tok_decline, amount=20000 | 200/402 with `status=FAILED` and a `decline_reason` code; wallet balance is unaffected; no partial credit is applied. | P1 | Negative |
+
+## NexaPay Wallet — P2P Transfer
+
+| TC ID | Endpoint / Method | Title | Preconditions | Request Data (brief) | Expected Result | Priority | Type |
+|---|---|---|---|---|---|---|---|
+| API-P2P-001 | POST /v1/wallet/transfers | Successful P2P transfer to another NexaPay user by phone number | Sender wallet has sufficient balance; recipient is an active NexaPay Wallet user. | recipient=+9715xxxxxxx, amount=5000, currency=AED | 201 Created; `status=COMPLETED`; sender balance decreases by 5000 and recipient balance increases by 5000 in the same logical operation. | P1 | Positive |
+| API-P2P-002 | POST /v1/wallet/transfers | P2P transfer is rejected when the sender has insufficient balance | Sender wallet balance is 3000. | recipient=+9715xxxxxxx, amount=5000 | 422 Unprocessable Entity; error code `INSUFFICIENT_BALANCE`; neither balance changes. | P1 | Negative |
+| API-P2P-003 | POST /v1/wallet/transfers | Self-transfer is blocked | Sender attempts to transfer to their own wallet/username. | recipient=self (same wallet_id as sender), amount=1000 | 422 Unprocessable Entity; error code `SELF_TRANSFER_NOT_ALLOWED`; no transfer record is created. | P2 | Negative |
+| API-P2P-004 | POST /v1/wallet/transfers | Per-transaction transfer limit is enforced | Sender's configured per-transaction P2P limit is AED 10,000. | amount=15000 (exceeds per-transaction limit) | 422 Unprocessable Entity; error code `TRANSFER_LIMIT_EXCEEDED`; response indicates the applicable per-transaction limit. | P2 | Boundary |
+| API-P2P-005 | POST /v1/wallet/transfers | Daily cumulative transfer limit is enforced | Sender has already transferred AED 9,000 today against a daily limit of AED 10,000. | amount=2000 (would bring cumulative total to 11000) | 422 Unprocessable Entity; error code `DAILY_LIMIT_EXCEEDED`; prior successful transfers for the day are unaffected. | P2 | Boundary |
+
+## NexaPay Wallet — Bill Payment
+
+| TC ID | Endpoint / Method | Title | Preconditions | Request Data (brief) | Expected Result | Priority | Type |
+|---|---|---|---|---|---|---|---|
+| API-BILL-001 | POST /v1/wallet/bill-payments | Successful bill payment to a registered biller from wallet balance | Wallet has sufficient balance; biller (e.g., a utility/telecom provider) is registered in the biller directory. | biller_id=biller_utility_01, biller_reference=UTIL-4477-2201, amount=15000 | 201 Created; `status=PENDING` transitioning to `SUCCESS`; wallet balance decreases by the paid amount only once status reaches `SUCCESS`. | P1 | Positive |
+| API-BILL-002 | POST /v1/wallet/bill-payments | Invalid or malformed biller reference is rejected | Biller requires a reference matching a documented format (e.g., a fixed-length account number). | biller_id=biller_utility_01, biller_reference=BAD-REF (malformed) | 422 Unprocessable Entity; error code `INVALID_BILLER_REFERENCE`; no debit is applied to the wallet. | P1 | Negative |
+| API-BILL-003 | POST /v1/wallet/bill-payments | Duplicate bill payment for the same biller reference within a short window is prevented | An identical bill payment for the same biller_reference and amount succeeded moments earlier. | biller_id=biller_utility_01, biller_reference=UTIL-4477-2201, amount=15000 (resubmitted) | 409 Conflict; error code `DUPLICATE_BILL_PAYMENT`; wallet is not debited a second time; original payment record is returned for reference. | P1 | Negative |
+| API-BILL-004 | GET /v1/wallet/bill-payments/{id} | Bill payment status polling reflects the pending-to-terminal transition | A bill payment was just submitted and is being processed by the biller's system. | bill_payment_id=bp_9001 | 200 OK; status progresses from `PENDING` to either `SUCCESS` or `FAILED`; polling never returns an intermediate/undefined status value. | P2 | Positive |
+
 ## Notes
 
-All card numbers above are well-known publicly documented test/sandbox values used across the payments industry for non-production testing; none reference a live account. NexaPay, its endpoints, and field names are invented for this portfolio and are illustrative rather than a literal API specification.
+All card numbers above are well-known publicly documented test/sandbox values used across the payments industry for non-production testing; none reference a live account. NexaPay, its endpoints, and field names are invented for this portfolio and are illustrative rather than a literal API specification. NexaPay Wallet is likewise an invented consumer product extension of the same fictional platform, added to demonstrate coverage of wallet-style payment methods (top-up, P2P transfer, bill payment) alongside the merchant-acquiring flows above.

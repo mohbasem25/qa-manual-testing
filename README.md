@@ -62,11 +62,11 @@ qa-manual-testing/
 ├── 05-traceability/
 │   └── Requirements-Traceability-Matrix.md
 └── 06-payment-domain-test-suites/
-    ├── API-Test-Cases.md
-    ├── Database-Test-Cases.md
-    ├── UI-Test-Cases.md
-    ├── Performance-Test-Cases.md
-    └── Security-Test-Cases.md
+    ├── API-Test-Cases.md          (+ API-Test-Cases.csv)
+    ├── Database-Test-Cases.md     (+ Database-Test-Cases.csv)
+    ├── UI-Test-Cases.md           (+ UI-Test-Cases.csv)
+    ├── Performance-Test-Cases.md  (+ Performance-Test-Cases.csv)
+    └── Security-Test-Cases.md     (+ Security-Test-Cases.csv)
 ```
 
 ## Why This Project (Skills Demonstrated)
@@ -79,15 +79,24 @@ qa-manual-testing/
 
 ## Extension: Payment-Domain Test Suites (NexaPay)
 
-**[`06-payment-domain-test-suites/`](06-payment-domain-test-suites/)** extends the same ISTQB-technique rigor used in the ShopSphere checkout suite to a second, deliberately different surface: a fictional payment gateway / merchant-acquiring platform, **NexaPay**. Where the ShopSphere artifacts walk end-to-end through the full manual QA lifecycle (plan → design → cases → traceability → bugs) for one flow, this addition demonstrates **cross-discipline test design applied to a single domain** — API, database, UI, performance, and security test cases for the same underlying platform, written the way a QA engineer working across those layers on a payment product actually would:
+**[`06-payment-domain-test-suites/`](06-payment-domain-test-suites/)** extends the same ISTQB-technique rigor used in the ShopSphere checkout suite to a second, deliberately different surface: a fictional payment gateway / merchant-acquiring platform, **NexaPay** — plus its consumer-facing counterpart, **NexaPay Wallet**. Where the ShopSphere artifacts walk end-to-end through the full manual QA lifecycle (plan → design → cases → traceability → bugs) for one flow, this addition demonstrates **cross-discipline test design applied to a single domain** — API, database, UI, performance, and security test cases for the same underlying platform, written the way a QA engineer working across those layers on a payment product actually would. Each discipline covers both the merchant-acquiring side (card authorize/capture/refund) and the consumer wallet side (top-up, P2P transfer, bill payment):
 
-- **[`API-Test-Cases.md`](06-payment-domain-test-suites/API-Test-Cases.md)** — authorize/capture/void, full and partial refunds, tokenized recurring charges, webhook delivery and retry, merchant onboarding, idempotency-key handling, pagination, and API error handling.
-- **[`Database-Test-Cases.md`](06-payment-domain-test-suites/Database-Test-Cases.md)** — transaction state-machine integrity, referential integrity, double-entry ledger reconciliation, idempotent writes, PCI-style data masking at rest, currency/amount precision, audit trail, and orphaned-record checks.
-- **[`UI-Test-Cases.md`](06-payment-domain-test-suites/UI-Test-Cases.md)** — merchant portal login/2FA, transaction filtering, manual refunds, settlement reports, API key management, multi-currency display, and role-based UI permissions.
-- **[`Performance-Test-Cases.md`](06-payment-domain-test-suites/Performance-Test-Cases.md)** — throughput baselines, soak and spike tests, authorize-endpoint latency SLAs, degraded-processor handling, and concurrent-refund race conditions, framed around representative tooling (k6/JMeter/Gatling) with example SLA targets.
-- **[`Security-Test-Cases.md`](06-payment-domain-test-suites/Security-Test-Cases.md)** — functional security checks (not a penetration test) covering card-data exposure in logs/responses, TLS enforcement, IDOR/authorization, rate limiting, brute-force lockout, token/key expiry, injection/XSS handling, webhook signature verification, and session security, framed against the general, publicly known PCI-DSS and OWASP API Security Top 10 categories.
+- **[`API-Test-Cases.md`](06-payment-domain-test-suites/API-Test-Cases.md)** — authorize/capture/void, full and partial refunds, tokenized recurring charges, webhook delivery and retry, merchant onboarding, idempotency-key handling, pagination, and API error handling; plus NexaPay Wallet top-up (card/bank-transfer funding), P2P transfer (insufficient balance, self-transfer prevention, per-transaction/daily limits), and bill payment (invalid biller reference, duplicate-payment prevention, status polling).
+- **[`Database-Test-Cases.md`](06-payment-domain-test-suites/Database-Test-Cases.md)** — transaction state-machine integrity, referential integrity, double-entry ledger reconciliation, idempotent writes, PCI-style data masking at rest, currency/amount precision, audit trail, and orphaned-record checks; plus wallet balance ledger consistency after top-up/P2P/bill-payment, P2P transfer atomicity (no partial debit/credit state, no overdraw under concurrency), idempotent bill-payment webhook retries, and transfer-limit enforcement at the data layer.
+- **[`UI-Test-Cases.md`](06-payment-domain-test-suites/UI-Test-Cases.md)** — merchant portal login/2FA, transaction filtering, manual refunds, settlement reports, API key management, multi-currency display, and role-based UI permissions; plus the NexaPay Wallet consumer app's balance display, top-up flow, P2P transfer flow (recipient lookup, confirmation, receipt), bill payment flow (biller selection, reference entry, confirmation), and wallet transaction-history filtering.
+- **[`Performance-Test-Cases.md`](06-payment-domain-test-suites/Performance-Test-Cases.md)** — throughput baselines, soak and spike tests, authorize-endpoint latency SLAs, degraded-processor handling, and concurrent-refund race conditions, framed around representative tooling (k6/JMeter/Gatling) with example SLA targets; plus P2P transfer throughput and latency SLAs, concurrent-transfer race safety (no double-spend), wallet top-up peak-load handling, and bill-payment queue backpressure at peak volume.
+- **[`Security-Test-Cases.md`](06-payment-domain-test-suites/Security-Test-Cases.md)** — functional security checks (not a penetration test) covering card-data exposure in logs/responses, TLS enforcement, IDOR/authorization, rate limiting, brute-force lockout, token/key expiry, injection/XSS handling, webhook signature verification, and session security, framed against the general, publicly known PCI-DSS and OWASP API Security Top 10 categories; plus P2P recipient IDOR/tamper checks, wallet balance tamper and top-up replay resistance, wallet PIN brute-force lockout, P2P transfer rate limiting, and biller-reference injection checks.
 
-**NexaPay is an entirely invented platform, created for this portfolio.** It does not represent, and is not modeled on, any real company's product, internal architecture, field names, or proprietary systems — including any current or former employer of the author. It exists solely to demonstrate how the same structured, technique-driven QA approach scales across API, data, UI, performance, and security layers in a payments context.
+**NexaPay and NexaPay Wallet are entirely invented products, created for this portfolio.** They do not represent, and are not modeled on, any real company's product, internal architecture, field names, or proprietary systems — including any current or former employer of the author. They exist solely to demonstrate how the same structured, technique-driven QA approach scales across API, data, UI, performance, and security layers in a payments context, for both merchant-acquiring and consumer-wallet payment methods.
+
+### Dual format: narrative Markdown + tool-import CSV
+
+Each discipline above ships in **two parallel formats**, mirroring how real QA teams maintain the same case library both for human review and for import into a test-management tool:
+
+- The **`.md`** files are the narrative, one-row-per-case view used above — quick to read, review, and diff.
+- The matching **`.csv`** files (`API-Test-Cases.csv`, `Database-Test-Cases.csv`, `UI-Test-Cases.csv`, `Performance-Test-Cases.csv`, `Security-Test-Cases.csv`) re-express the same set of cases in a **Zephyr/qTest/TestRail-style multi-step export schema** — `Name, Objective, Precondition, Status, Priority, Folder, Component, Labels, Step, Test Data, Expected Result, Notes, Coverage` — with each case broken into 2-4 sequential, importable steps, organized into a fictional folder taxonomy (e.g. `/NexaPay/API/Authorization & Capture`) and traced to a small set of invented requirement IDs (e.g. `NXP-101`) purely for illustration.
+
+The CSVs are not a literal export from any real tool or vendor; they demonstrate the *shape* of a professional test-case-management import rather than reproducing a specific product's format.
 
 ## Notes on Realism
 

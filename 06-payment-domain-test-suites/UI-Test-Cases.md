@@ -1,8 +1,8 @@
 # UI Test Cases — NexaPay Merchant Portal
 
-**Platform under test:** the NexaPay Merchant Portal — a fictional web dashboard where merchants log in to view transactions, issue refunds, review settlement/payout reports, and manage API keys for their integration with the (fictional) NexaPay payment gateway.
+**Platform under test:** the NexaPay Merchant Portal — a fictional web dashboard where merchants log in to view transactions, issue refunds, review settlement/payout reports, and manage API keys for their integration with the (fictional) NexaPay payment gateway. Also covers the **NexaPay Wallet** consumer app — the wallet balance/top-up, P2P transfer, bill payment, and wallet transaction history screens.
 
-**Total test cases:** 20
+**Total test cases:** 33
 **Columns:** TC ID | Title | Preconditions | Steps | Test Data | Expected Result | Priority | Type
 
 ## Login & Authentication
@@ -62,6 +62,39 @@
 | UI-PERM-001 | Support-role user sees masked card data only, not full PAN | A user account is assigned the 'Support' role (read-only, limited PII visibility). | 1. Log in as a Support-role user. 2. Open a transaction detail view. | Card on file: **** 1111 | Only masked card (last 4 digits) and brand are visible; no UI control or hidden field exposes the full PAN; API responses backing the view are also masked. | P1 | Security |
 | UI-PERM-002 | Support-role user cannot access API Key Management or issue refunds | Support-role user is logged in. | 1. Attempt to navigate directly to the API Keys URL. 2. Attempt to open a transaction and locate a 'Refund' control. | N/A | Navigation is blocked with a 'not authorized' page or the menu item is absent; 'Refund' action is not present/is disabled for this role. | P1 | Security |
 
+## NexaPay Wallet — Balance & Top-Up
+
+The **NexaPay Wallet** consumer app is a separate front end from the Merchant Portal above, used by end users to hold a balance, top it up, send P2P transfers, and pay bills.
+
+| TC ID | Title | Preconditions | Steps | Test Data | Expected Result | Priority | Type |
+|---|---|---|---|---|---|---|---|
+| UI-WAL-001 | Wallet balance displays correctly on the Wallet home screen | Consumer is logged in and has a non-zero wallet balance. | 1. Log in to the NexaPay Wallet app. 2. Land on the Wallet home screen. | Balance: AED 340.50 | Current available balance is displayed prominently, correctly formatted with currency symbol and two-decimal precision; balance matches the backend ledger total. | P1 | Positive |
+| UI-WAL-002 | Wallet top-up flow: selecting a funding source and entering an amount | Consumer has at least one linked bank card and a bank-transfer option available. | 1. Tap 'Top Up'. 2. Select a funding source (linked card or bank transfer). 3. Enter an amount. 4. Confirm. | Amount: AED 200.00; source: linked card | Confirmation screen appears before submission; amount below a configured minimum is blocked with inline validation; a valid amount proceeds to submission. | P1 | Positive |
+| UI-WAL-003 | Wallet top-up confirmation screen shows the updated balance | A top-up of AED 200.00 has just completed successfully. | 1. Complete a top-up. 2. Observe the success/confirmation screen. 3. Return to the Wallet home screen. | Amount: AED 200.00 | Success screen shows the amount credited and a transaction reference; Wallet home screen balance reflects the new total without requiring a manual refresh. | P1 | Positive |
+
+## NexaPay Wallet — P2P Transfer
+
+| TC ID | Title | Preconditions | Steps | Test Data | Expected Result | Priority | Type |
+|---|---|---|---|---|---|---|---|
+| UI-P2P-001 | P2P transfer: recipient lookup by phone number or username | Consumer wants to send money to another NexaPay user. | 1. Tap 'Send Money'. 2. Enter a recipient's phone number or username. 3. Observe the lookup result. | Recipient: +9715xxxxxxx | Matching recipient's masked name/profile is shown for confirmation before any amount is entered; an unknown phone number/username shows a clear 'no NexaPay user found' state. | P1 | Positive |
+| UI-P2P-002 | P2P transfer confirmation screen before submission | A valid recipient has been found and an amount entered. | 1. Enter a transfer amount. 2. Tap 'Continue'. 3. Review the confirmation screen. | Amount: AED 50.00 | Confirmation screen clearly shows recipient name, amount, and any fee (if applicable) before the user can tap the final 'Send' action; amount and recipient cannot be silently altered after this screen. | P1 | Positive |
+| UI-P2P-003 | P2P transfer receipt/success screen with transaction reference | A P2P transfer has just completed successfully. | 1. Confirm and send a transfer. 2. Observe the success/receipt screen. | Amount: AED 50.00 | Receipt screen shows amount, recipient, timestamp, and a unique transaction reference; receipt is also retrievable later from transaction history. | P1 | Positive |
+| UI-P2P-004 | P2P transfer is blocked in the UI when the amount exceeds available balance | Wallet balance is AED 30.00. | 1. Tap 'Send Money'. 2. Select a valid recipient. 3. Enter an amount greater than the available balance. | Amount entered: AED 50.00 | 'Continue'/'Send' action is disabled or an inline validation error appears ('Insufficient balance') before submission; no transfer request is sent. | P1 | Boundary |
+
+## NexaPay Wallet — Bill Payment
+
+| TC ID | Title | Preconditions | Steps | Test Data | Expected Result | Priority | Type |
+|---|---|---|---|---|---|---|---|
+| UI-BILL-001 | Bill payment: biller selection from a category list | Consumer wants to pay a utility or telecom bill. | 1. Tap 'Pay Bills'. 2. Browse or search biller categories (e.g., Electricity, Telecom). 3. Select a specific biller. | Category: Telecom; Biller: sample telecom provider | Biller categories and billers load correctly; selecting a biller proceeds to the reference-entry screen for that biller. | P2 | Positive |
+| UI-BILL-002 | Bill payment: biller reference entry validation | A biller has been selected that requires a fixed-format account/reference number. | 1. Enter a biller reference in an invalid format. 2. Attempt to continue. | Reference entered: 'ABC' (invalid format) | Inline validation error is shown before submission ('Enter a valid account/reference number'); 'Continue' remains disabled until a validly formatted reference is entered. | P1 | Negative |
+| UI-BILL-003 | Bill payment confirmation and success screen | A valid biller reference and amount have been entered. | 1. Review the confirmation screen showing biller, reference, and amount. 2. Confirm payment. 3. Observe the success screen and status. | Amount: AED 150.00 | Confirmation screen requires explicit confirmation before charging the wallet; success screen shows a `Pending`/`Success` status consistent with the backend, with a transaction reference. | P1 | Positive |
+
+## NexaPay Wallet — Transaction History
+
+| TC ID | Title | Preconditions | Steps | Test Data | Expected Result | Priority | Type |
+|---|---|---|---|---|---|---|---|
+| UI-HIST-001 | Transaction history filtering by wallet activity type | Wallet history contains a mix of top-ups, P2P transfers, and bill payments. | 1. Navigate to 'Transaction History'. 2. Apply a filter for 'P2P Transfers' only. 3. Switch the filter to 'Bill Payments' only. | Filter: P2P Transfers, then Bill Payments | Each filter correctly narrows the list to only the selected activity type; each entry shows type-appropriate details (recipient for P2P, biller for bill payment); filters can be cleared to restore the full combined history. | P2 | Positive |
+
 ## Notes
 
-Screen names, field labels, and roles above are generic and illustrative of a typical PSP merchant dashboard; they are not modeled on any specific real vendor's UI.
+Screen names, field labels, and roles above are generic and illustrative of a typical PSP merchant dashboard and consumer wallet app; they are not modeled on any specific real vendor's UI.
